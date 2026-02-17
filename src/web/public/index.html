@@ -248,6 +248,12 @@
             <path d="M2 8a6 6 0 0110.5-4M14 2v4h-4M14 8a6 6 0 01-10.5 4M2 14v-4h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
+        <button class="btn btn-ghost btn-icon" id="telegram-settings-btn" title="Telegram notifications">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M14.5 1.5l-13 5.5 4 1.5 1.5 5 3-3 3.5 2.5z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5.5 8.5l9-7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </button>
         <button class="btn btn-ghost btn-icon" id="logout-btn" title="Logout">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M6 2H4a2 2 0 00-2 2v8a2 2 0 002 2h2M10.5 11.5L14 8l-3.5-3.5M14 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
@@ -981,6 +987,68 @@
       <div class="modal-footer" id="update-footer">
         <button class="btn btn-primary" id="update-start-btn">Update Now</button>
         <button class="btn btn-ghost" id="update-dismiss-btn">Later</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TELEGRAM SETTINGS MODAL                     -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="modal-overlay" id="telegram-overlay" hidden>
+    <div class="modal telegram-modal" role="dialog" aria-modal="true" aria-label="Telegram Notifications">
+      <div class="modal-header">
+        <h3 class="modal-title">Telegram Notifications</h3>
+        <button class="btn btn-ghost btn-icon btn-sm" id="telegram-close-btn" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body telegram-body">
+        <p class="telegram-hint">Get push notifications on Telegram when sessions fail or need input.</p>
+
+        <div class="telegram-field">
+          <label class="telegram-label">
+            <input type="checkbox" id="telegram-enabled"> Enable Telegram notifications
+          </label>
+        </div>
+
+        <div class="telegram-field">
+          <label class="telegram-label" for="telegram-bot-token">Bot Token</label>
+          <div class="telegram-input-row">
+            <input type="password" id="telegram-bot-token" class="telegram-input" placeholder="123456:ABC-DEF1234..." autocomplete="off">
+          </div>
+          <span class="telegram-field-hint">Create a bot via <strong>@BotFather</strong> on Telegram to get a token.</span>
+        </div>
+
+        <div class="telegram-field">
+          <label class="telegram-label" for="telegram-chat-id">Chat ID</label>
+          <div class="telegram-input-row">
+            <input type="text" id="telegram-chat-id" class="telegram-input" placeholder="123456789" autocomplete="off">
+            <button class="btn btn-ghost btn-sm" id="telegram-detect-btn" title="Auto-detect chat ID">Detect</button>
+          </div>
+          <span class="telegram-field-hint">Send <strong>/start</strong> to your bot first, then click Detect.</span>
+        </div>
+
+        <div class="telegram-field">
+          <label class="telegram-label">Notify on</label>
+          <div class="telegram-levels">
+            <label><input type="checkbox" value="error" class="telegram-level-cb" checked> Errors</label>
+            <label><input type="checkbox" value="warning" class="telegram-level-cb" checked> Warnings</label>
+            <label><input type="checkbox" value="success" class="telegram-level-cb"> Success</label>
+            <label><input type="checkbox" value="info" class="telegram-level-cb"> Info</label>
+          </div>
+        </div>
+
+        <div class="telegram-field">
+          <label class="telegram-label" for="telegram-throttle">Throttle (seconds)</label>
+          <input type="number" id="telegram-throttle" class="telegram-input telegram-input-sm" value="10" min="0" max="3600">
+          <span class="telegram-field-hint">Minimum seconds between messages to avoid spam.</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="telegram-test-btn">Send Test</button>
+        <button class="btn btn-primary" id="telegram-save-btn">Save</button>
       </div>
     </div>
   </div>

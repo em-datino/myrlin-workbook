@@ -136,6 +136,16 @@ function getNotificationManager() {
   if (!instance) {
     instance = new NotificationManager();
     instance.attachStoreListeners();
+
+    // Attach Telegram push notifications (fire-and-forget)
+    try {
+      const telegram = require('./telegram');
+      telegram.loadConfig();
+      telegram.attachToNotificationManager(instance);
+    } catch (err) {
+      // Non-fatal: Telegram integration is optional
+      console.warn('[Notifications] Telegram integration unavailable:', err.message);
+    }
   }
   return instance;
 }

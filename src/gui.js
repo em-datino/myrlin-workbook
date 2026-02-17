@@ -89,7 +89,9 @@ if (process.argv.includes('--demo')) {
 // ─── Start Server ──────────────────────────────────────────
 
 const port = parseInt(process.env.PORT, 10) || 3456;
-const host = process.env.CWM_HOST || '127.0.0.1';
+// Default to 0.0.0.0 so the server is reachable over Tailscale and other
+// private network interfaces. Set CWM_HOST=127.0.0.1 to restrict to localhost only.
+const host = process.env.CWM_HOST || '0.0.0.0';
 const server = startServer(port, host);
 
 console.log(`CWM GUI running at http://${host}:${port}`);

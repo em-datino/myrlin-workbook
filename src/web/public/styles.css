@@ -1750,6 +1750,98 @@ textarea.input {
 }
 
 
+/* ─── Telegram Settings ────────────────────────────────────── */
+
+.telegram-modal {
+  max-width: 460px;
+}
+
+.telegram-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0 0 16px !important;
+}
+
+.telegram-field {
+  margin-bottom: 14px;
+}
+
+.telegram-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 5px;
+  color: var(--text-primary);
+}
+
+.telegram-label input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+
+.telegram-input {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.telegram-input:focus {
+  border-color: var(--accent);
+}
+
+.telegram-input-sm {
+  width: 80px;
+}
+
+.telegram-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.telegram-input-row .telegram-input {
+  flex: 1;
+}
+
+.telegram-field-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.telegram-field-hint strong {
+  color: var(--text-primary);
+}
+
+.telegram-levels {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.telegram-levels label {
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.telegram-levels input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+
 /* ─── Quick Switcher ────────────────────────────────────────── */
 
 .quick-switcher {

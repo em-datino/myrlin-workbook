@@ -397,9 +397,10 @@ class CWMApp {
       this.login(this.els.loginPassword.value);
     });
 
-    // Logout & Restart All
+    // Logout, Restart All, Telegram Settings
     this.els.logoutBtn.addEventListener('click', () => this.logout());
     document.getElementById('restart-all-btn').addEventListener('click', () => this.restartAllSessions());
+    this._bindTelegramSettings();
 
     // Password visibility toggle
     if (this.els.passwordToggleBtn) {
@@ -10464,6 +10465,166 @@ class CWMApp {
     tabs.forEach((tab, i) => {
       tab.classList.toggle('active', i === this._activeTerminalSlot);
     });
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     TELEGRAM NOTIFICATIONS SETTINGS
+     ═══════════════════════════════════════════════════════════ */
+
+  _bindTelegramSettings() {
+    const overlay = document.getElementById('telegram-overlay');
+    const openBtn = document.getElementById('telegram-settings-btn');
+    const closeBtn = document.getElementById('telegram-close-btn');
+    const saveBtn = document.getElementById('telegram-save-btn');
+    const testBtn = document.getElementById('telegram-test-btn');
+    const detectBtn = document.getElementById('telegram-detect-btn');
+
+    if (!overlay || !openBtn) return;
+
+    openBtn.addEventListener('click', () => this._openTelegramSettings());
+
+    closeBtn.addEventListener('click', () => { overlay.hidden = true; });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.hidden = true;
+    });
+
+    saveBtn.addEventListener('click', () => this._saveTelegramSettings());
+    testBtn.addEventListener('click', () => this._testTelegram());
+    detectBtn.addEventListener('click', () => this._detectTelegramChat());
+  }
+
+  async _openTelegramSettings() {
+    const overlay = document.getElementById('telegram-overlay');
+    overlay.hidden = false;
+
+    try {
+      const resp = await fetch('/api/telegram/config', {
+        headers: { 'Authorization': 'Bearer ' + this.state.token },
+      });
+      if (!resp.ok) return;
+      const config = await resp.json();
+
+      document.getElementById('telegram-enabled').checked = config.enabled;
+      // Don't overwrite if user is editing - only populate if empty
+      const tokenInput = document.getElementById('telegram-bot-token');
+      if (!tokenInput.value) tokenInput.placeholder = config.hasToken ? '(saved - enter new to change)' : '123456:ABC-DEF1234...';
+      document.getElementById('telegram-chat-id').value = config.chatId || '';
+      document.getElementById('telegram-throttle').value = config.throttleSeconds || 10;
+
+      // Set level checkboxes
+      document.querySelectorAll('.telegram-level-cb').forEach(cb => {
+        cb.checked = (config.levels || []).includes(cb.value);
+      });
+    } catch (err) {
+      this.showToast('Failed to load Telegram config', 'error');
+    }
+  }
+
+  async _saveTelegramSettings() {
+    const levels = [];
+    document.querySelectorAll('.telegram-level-cb').forEach(cb => {
+      if (cb.checked) levels.push(cb.value);
+    });
+
+    const body = {
+      enabled: document.getElementById('telegram-enabled').checked,
+      chatId: document.getElementById('telegram-chat-id').value.trim(),
+      levels,
+      throttleSeconds: parseInt(document.getElementById('telegram-throttle').value, 10) || 10,
+    };
+
+    // Only send bot token if user entered a new one
+    const tokenValue = document.getElementById('telegram-bot-token').value.trim();
+    if (tokenValue) body.botToken = tokenValue;
+
+    try {
+      const resp = await fetch('/api/telegram/config', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + this.state.token,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error('Save failed');
+      const config = await resp.json();
+
+      // Clear the token input after save
+      document.getElementById('telegram-bot-token').value = '';
+      document.getElementById('telegram-bot-token').placeholder = config.hasToken ? '(saved - enter new to change)' : '123456:ABC-DEF1234...';
+
+      this.showToast('Telegram settings saved', 'success');
+    } catch (err) {
+      this.showToast('Failed to save Telegram settings', 'error');
+    }
+  }
+
+  async _testTelegram() {
+    const testBtn = document.getElementById('telegram-test-btn');
+    testBtn.disabled = true;
+    testBtn.textContent = 'Sending...';
+
+    try {
+      // Save first to ensure latest config is used
+      await this._saveTelegramSettings();
+
+      const resp = await fetch('/api/telegram/test', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + this.state.token },
+      });
+      const result = await resp.json();
+      if (result.success) {
+        this.showToast('Test message sent! Check your Telegram.', 'success');
+      } else {
+        this.showToast('Test failed: ' + (result.error || 'unknown error'), 'error');
+      }
+    } catch (err) {
+      this.showToast('Test failed: ' + err.message, 'error');
+    } finally {
+      testBtn.disabled = false;
+      testBtn.textContent = 'Send Test';
+    }
+  }
+
+  async _detectTelegramChat() {
+    const detectBtn = document.getElementById('telegram-detect-btn');
+    detectBtn.disabled = true;
+    detectBtn.textContent = 'Detecting...';
+
+    // Save the token first if user entered one
+    const tokenValue = document.getElementById('telegram-bot-token').value.trim();
+    if (tokenValue) {
+      try {
+        await fetch('/api/telegram/config', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + this.state.token,
+          },
+          body: JSON.stringify({ botToken: tokenValue }),
+        });
+      } catch (_) {}
+    }
+
+    try {
+      const resp = await fetch('/api/telegram/detect-chat', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + this.state.token },
+      });
+      const result = await resp.json();
+      if (result.success) {
+        document.getElementById('telegram-chat-id').value = result.chatId;
+        const who = result.username ? ` (${result.username})` : '';
+        this.showToast('Chat ID detected' + who, 'success');
+      } else {
+        this.showToast(result.error || 'Could not detect chat ID', 'error');
+      }
+    } catch (err) {
+      this.showToast('Detection failed: ' + err.message, 'error');
+    } finally {
+      detectBtn.disabled = false;
+      detectBtn.textContent = 'Detect';
+    }
   }
 }
 

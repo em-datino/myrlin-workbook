@@ -93,18 +93,32 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS headers - restrict to localhost origins only
+// CORS headers - allow localhost + Tailscale/private network origins
+// Additional origins can be added via CWM_CORS_ORIGINS env var (comma-separated)
 app.use((req, res, next) => {
   const origin = req.headers.origin || '';
-  const allowedOrigins = [
+  const localhostPrefixes = [
     'http://localhost',
     'http://127.0.0.1',
     'https://localhost',
     'https://127.0.0.1',
   ];
-  // Allow any localhost port (e.g. http://localhost:3456, http://localhost:5173)
-  const isAllowed = allowedOrigins.some(allowed => origin === allowed || origin.startsWith(allowed + ':'));
-  if (isAllowed) {
+  // Tailscale MagicDNS patterns (*.ts.net) and common private network patterns
+  const tailscalePattern = /^https?:\/\/[a-zA-Z0-9._-]+\.ts\.net(:\d+)?$/;
+  const privateIpPattern = /^https?:\/\/(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+)(:\d+)?$/;
+
+  const isLocalhost = localhostPrefixes.some(p => origin === p || origin.startsWith(p + ':'));
+  const isTailscale = tailscalePattern.test(origin);
+  const isPrivateNet = privateIpPattern.test(origin);
+
+  // Check user-supplied extra origins (CWM_CORS_ORIGINS="https://my.domain,http://other:8080")
+  let isExtraOrigin = false;
+  if (process.env.CWM_CORS_ORIGINS) {
+    const extras = process.env.CWM_CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+    isExtraOrigin = extras.some(e => origin === e || origin.startsWith(e + ':'));
+  }
+
+  if (isLocalhost || isTailscale || isPrivateNet || isExtraOrigin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -118,12 +132,24 @@ app.use((req, res, next) => {
 
 // ─── Security Headers ────────────────────────────────────────
 app.use((req, res, next) => {
-  // Content Security Policy - allow self + inline styles (for dynamic UI) + WebSocket
+  // Build dynamic connect-src based on the requesting host so WebSocket and
+  // fetch work over Tailscale / private networks without hardcoding hostnames.
+  // 'self' covers same-origin HTTP(S) fetches; we add explicit ws(s):// for the
+  // requesting host since 'self' does not cover WebSocket protocol switches.
+  const reqHost = req.headers.host || 'localhost';
+  const hostOnly = reqHost.split(':')[0]; // strip port
+  const connectSrc = [
+    "'self'",
+    `ws://${hostOnly}:*`, `wss://${hostOnly}:*`,
+    'ws://localhost:*', 'wss://localhost:*',
+    'ws://127.0.0.1:*', 'wss://127.0.0.1:*',
+  ].join(' ');
+
   res.setHeader('Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-    "connect-src 'self' ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:*; " +
-    "img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; " +
-    "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com;"
+    `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; ` +
+    `connect-src ${connectSrc}; ` +
+    `img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; ` +
+    `style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com;`
   );
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -3972,6 +3998,101 @@ app.delete('/api/tunnels/:id', requireAuth, (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────
+//  TELEGRAM NOTIFICATIONS
+// ──────────────────────────────────────────────────────────
+
+const telegram = require('../core/telegram');
+
+/**
+ * GET /api/telegram/config
+ * Returns the current Telegram notification configuration (bot token masked).
+ */
+app.get('/api/telegram/config', requireAuth, (req, res) => {
+  const config = telegram.getConfig();
+  // Mask the bot token for security - only show last 8 chars
+  const maskedToken = config.botToken
+    ? '***' + config.botToken.slice(-8)
+    : '';
+  res.json({
+    enabled: config.enabled,
+    botToken: maskedToken,
+    chatId: config.chatId,
+    levels: config.levels,
+    throttleSeconds: config.throttleSeconds,
+    hasToken: !!config.botToken,
+  });
+});
+
+/**
+ * PUT /api/telegram/config
+ * Update Telegram notification settings.
+ * Body: { enabled?, botToken?, chatId?, levels?, throttleSeconds? }
+ */
+app.put('/api/telegram/config', requireAuth, (req, res) => {
+  const { enabled, botToken, chatId, levels, throttleSeconds } = req.body || {};
+  const updates = {};
+
+  if (typeof enabled === 'boolean') updates.enabled = enabled;
+  if (typeof botToken === 'string') updates.botToken = botToken.trim();
+  if (typeof chatId === 'string') updates.chatId = chatId.trim();
+  if (Array.isArray(levels)) {
+    // Validate level values
+    const validLevels = ['info', 'success', 'warning', 'error'];
+    updates.levels = levels.filter(l => validLevels.includes(l));
+  }
+  if (typeof throttleSeconds === 'number' && throttleSeconds >= 0) {
+    updates.throttleSeconds = Math.max(0, Math.min(3600, throttleSeconds));
+  }
+
+  const config = telegram.updateConfig(updates);
+  const maskedToken = config.botToken ? '***' + config.botToken.slice(-8) : '';
+  res.json({
+    enabled: config.enabled,
+    botToken: maskedToken,
+    chatId: config.chatId,
+    levels: config.levels,
+    throttleSeconds: config.throttleSeconds,
+    hasToken: !!config.botToken,
+  });
+});
+
+/**
+ * POST /api/telegram/test
+ * Send a test message to verify Telegram is configured correctly.
+ */
+app.post('/api/telegram/test', requireAuth, async (req, res) => {
+  const result = await telegram.sendTestMessage();
+  if (result.success) {
+    res.json({ success: true, message: 'Test message sent successfully' });
+  } else {
+    res.status(400).json({ success: false, error: result.error });
+  }
+});
+
+/**
+ * POST /api/telegram/detect-chat
+ * Auto-detect chat ID from recent messages sent to the bot.
+ * User must send /start to the bot first.
+ */
+app.post('/api/telegram/detect-chat', requireAuth, async (req, res) => {
+  const config = telegram.getConfig();
+  if (!config.botToken) {
+    return res.status(400).json({ error: 'Bot token must be configured first' });
+  }
+  const result = await telegram.detectChatId();
+  if (result) {
+    // Auto-save the detected chat ID
+    telegram.updateConfig({ chatId: result.chatId });
+    res.json({ success: true, chatId: result.chatId, username: result.username });
+  } else {
+    res.status(404).json({
+      success: false,
+      error: 'No messages found. Send /start to your bot first, then try again.',
+    });
+  }
+});
+
+// ──────────────────────────────────────────────────────────
 //  SESSION SEARCH (full-text across all JSONL files)
 // ──────────────────────────────────────────────────────────
 
@@ -4420,7 +4541,7 @@ app.get('/api/browse', requireAuth, (req, res) => {
 // Reference to PTY manager for cleanup on shutdown
 let _ptyManager = null;
 
-function startServer(port = 3456, host = '127.0.0.1') {
+function startServer(port = 3456, host = '0.0.0.0') {
   // Wire store events to SSE before accepting connections
   attachStoreEvents();
 
